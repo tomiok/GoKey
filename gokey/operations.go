@@ -18,4 +18,14 @@ type Operations interface {
 	// Exists checks if a key is registered.
 	// Returns true if it exists, false if not, and a optional error.
 	Exists(key string) (bool, error)
+
+	SetOperations
+}
+
+type values []any
+
+type SetOperations interface {
+	SAdd(key string, v ...values) (bool, error)
+	SGet() ([]any, error)
+	SDelete()
 }

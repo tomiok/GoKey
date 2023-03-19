@@ -1,6 +1,7 @@
 package gokey
 
 import (
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -11,12 +12,8 @@ type Cache struct {
 	pairsSet map[string]tuple //contains expiration time and value of a key
 
 	hashFn func([]byte) (string, error)
-}
 
-type tuple struct {
-	ttl       time.Duration
-	createdAt time.Time
-	value     []byte
+	sets map[string][]tuple
 }
 
 var (
@@ -66,7 +63,6 @@ func (c *Cache) Get(key string) ([]byte, error) {
 // Upsert cache a new key pair or update an existing one
 // if ttl is equals to zero the key will not expire
 func (c *Cache) Upsert(key string, value []byte, ttl time.Duration) (bool, error) {
-
 	if isEmpty(key) {
 		return false, ErrEmptyKey
 	}
@@ -77,10 +73,6 @@ func (c *Cache) Upsert(key string, value []byte, ttl time.Duration) (bool, error
 	keyHashed, err := c.hashFn([]byte(key))
 	if err != nil {
 		return false, err
-	}
-
-	if c.pairsSet == nil {
-		c.pairsSet = make(map[string]tuple)
 	}
 
 	// redis in generic command:  if (ttl == -1)
@@ -141,4 +133,38 @@ func (c *Cache) Exists(key string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (c *Cache) SAdd(key string, vals ...values) (bool, error) {
+	hashedKey, err := c.hashFn([]byte(key))
+	if err != nil {
+		return false, err
+	}
+	if exKey, ok := c.sets[hashedKey]; !ok {
+		for _, val := range vals {
+			b, err := json.Marshal(val)
+			if err != nil {
+				return false, err
+			}
+			exKey = append(exKey, tuple{
+				ttl:       1,
+				createdAt: time.Now(),
+				value:     b,
+			})
+		}
+		return true, nil
+	}
+
+	var tuples []tuple
+
+}
+
+func (c *Cache) SGet() ([]any, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *Cache) SDelete() {
+	//TODO implement me
+	panic("implement me")
 }
