@@ -29,3 +29,7 @@ func (c *Client) Get(key string) ([]byte, error) {
 func (c *Client) Delete(key string) (bool, error) {
 	return c.cache.Delete(key)
 }
+
+func (c *Client) Sadd(key string, v values) (bool, error) {
+	return c.cache.SAdd(key, v)
+}

@@ -8,15 +8,10 @@ import (
 
 type Cache struct {
 	sync.RWMutex
-	pairsSet map[string]tuple //contains expiration time and value of a key
+	entries map[string]tuple // contains expiration time and value of a key.
 
-	hashFn func([]byte) (string, error)
-}
-
-type tuple struct {
-	ttl       time.Duration
-	createdAt time.Time
-	value     []byte
+	setEntries map[string]map[string]struct{}
+	hashFn     func([]byte) (string, error)
 }
 
 var (
@@ -29,9 +24,10 @@ var (
 
 func newCache() *Cache {
 	return &Cache{
-		RWMutex:  sync.RWMutex{},
-		pairsSet: make(map[string]tuple, getLimitPairsSet()),
-		hashFn:   generateMD5,
+		RWMutex:    sync.RWMutex{},
+		entries:    make(map[string]tuple, getLimitPairsSet()),
+		setEntries: make(map[string]map[string]struct{}),
+		hashFn:     generateMD5,
 	}
 }
 
@@ -49,14 +45,14 @@ func (c *Cache) Get(key string) ([]byte, error) {
 		return nil, err
 	}
 
-	pair, exists := c.pairsSet[keyHashed]
+	pair, exists := c.entries[keyHashed]
 
 	if !exists {
 		return nil, ErrNoExistKey
 	}
 
 	if time.Since(pair.createdAt) > pair.ttl && pair.ttl != -1 {
-		delete(c.pairsSet, keyHashed)
+		delete(c.entries, keyHashed)
 		return nil, ErrNoExistKey
 	}
 
@@ -70,7 +66,7 @@ func (c *Cache) Upsert(key string, value []byte, ttl time.Duration) (bool, error
 		return false, ErrEmptyKey
 	}
 
-	errPairs := c.checkPairsSetLimit(&c.pairsSet)
+	errPairs := c.checkPairsSetLimit(&c.entries)
 	if errPairs != nil {
 		return false, errPairs
 	}
@@ -88,13 +84,9 @@ func (c *Cache) Upsert(key string, value []byte, ttl time.Duration) (bool, error
 		return false, err
 	}
 
-	if c.pairsSet == nil {
-		c.pairsSet = make(map[string]tuple, getLimitPairsSet())
-	}
-
 	// redis in generic command:  if (ttl == -1)
 	// golang use with functions time.Duration = -1
-	c.pairsSet[keyHashed] = tuple{
+	c.entries[keyHashed] = tuple{
 		ttl:       ttl,
 		createdAt: time.Now(),
 		value:     value,
@@ -115,10 +107,10 @@ func (c *Cache) Delete(key string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, exists := c.pairsSet[keyHashed]
+	_, exists := c.entries[keyHashed]
 
 	if exists {
-		delete(c.pairsSet, keyHashed)
+		delete(c.entries, keyHashed)
 	} else {
 		return false, errors.New("key not found")
 	}
@@ -139,7 +131,7 @@ func (c *Cache) Exists(key string) (bool, error) {
 		return false, err
 	}
 
-	pair, exists := c.pairsSet[keyHashed]
+	pair, exists := c.entries[keyHashed]
 
 	if !exists {
 		return false, ErrNoExistKey
