@@ -33,3 +33,7 @@ func (c *Client) Delete(key string) (bool, error) {
 func (c *Client) Sadd(key string, v values) (bool, error) {
 	return c.cache.SAdd(key, v)
 }
+
+func (c *Client) Sget(k string) ([]any, error) {
+	return c.cache.SGet(k)
+}

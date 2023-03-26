@@ -2,18 +2,6 @@ package gokey
 
 import "encoding/json"
 
-type setEntry struct {
-	entry string
-}
-
-func (s setEntry) MarshalText() ([]byte, error) {
-	return json.Marshal(s)
-}
-
-func (s *setEntry) UnmarshalText(b []byte) error {
-	return json.Unmarshal(b, s)
-}
-
 func (c *Cache) SAdd(key string, v values) (bool, error) {
 	setEntries := make(map[string]struct{})
 	for _, r := range v {
@@ -29,12 +17,17 @@ func (c *Cache) SAdd(key string, v values) (bool, error) {
 	return true, nil
 }
 
-func (c *Cache) SGet() ([]any, error) {
-	//TODO implement me
-	panic("implement me")
+func (c *Cache) SGet(key string) ([]any, error) {
+	_set := c.setEntries[key]
+
+	_values := make([]any, 0, len(_set))
+	for k, _ := range _set {
+		_values = append(_values, k)
+	}
+	return _values, nil
 }
 
-func (c *Cache) SDelete() {
+func (c *Cache) SDelete(key string) bool {
 	//TODO implement me
 	panic("implement me")
 }

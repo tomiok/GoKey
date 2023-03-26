@@ -26,6 +26,6 @@ type values []any
 
 type SetOperations interface {
 	SAdd(key string, v values) (bool, error)
-	SGet() ([]any, error)
-	SDelete()
+	SGet(key string) ([]any, error)
+	SDelete(key string) bool
 }
