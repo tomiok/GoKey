@@ -8,7 +8,7 @@ import (
 
 type THash string
 
-// constans to select type of hash algorithm, Example:Options{Ahash:MD5}
+// constants to select type of hash algorithm, Example:Options{Ahash:MD5}
 var (
 	MD5    = THash("md5")
 	SHA256 = THash("sha256")
@@ -20,12 +20,6 @@ type Cache struct {
 	pairsSet map[string]tuple //contains expiration time and value of a key
 
 	hashFn func([]byte) string
-}
-
-type tuple struct {
-	ttl       time.Duration
-	createdAt time.Time
-	value     []byte
 }
 
 // Options allow at user set properties of cache like
