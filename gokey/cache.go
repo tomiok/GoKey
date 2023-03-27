@@ -6,12 +6,34 @@ import (
 	"time"
 )
 
+type THash string
+
+// constans to select type of hash algorithm, Example:Options{Ahash:MD5}
+var (
+	MD5    = THash("md5")
+	SHA256 = THash("sha256")
+	SHA1   = THash("sha1")
+)
+
 type Cache struct {
 	sync.RWMutex
-	entries map[string]tuple // contains expiration time and value of a key.
+	pairsSet map[string]tuple //contains expiration time and value of a key
 
-	setEntries map[string]map[string]struct{}
-	hashFn     func([]byte) (string, error)
+	hashFn func([]byte) string
+}
+
+type tuple struct {
+	ttl       time.Duration
+	createdAt time.Time
+	value     []byte
+}
+
+// Options allow at user set properties of cache like
+// maxsize or hash algorithm
+type Options struct {
+	MaxSize int
+	AHast   THash
+	TTL     float64 // in Newcache or their methods?
 }
 
 var (
@@ -22,12 +44,20 @@ var (
 	ErrExpiredKey = errors.New("key has expired")
 )
 
-func newCache() *Cache {
+func newCache(o ...*Options) *Cache {
+	var options *Options
+
+	if len(o) < 1 || o[0] == nil {
+		options = &Options{}
+	} else {
+		options = o[0]
+	}
+
+	hashFn := selectHash(options.AHast)
 	return &Cache{
-		RWMutex:    sync.RWMutex{},
-		entries:    make(map[string]tuple, getLimitPairsSet()),
-		setEntries: make(map[string]map[string]struct{}),
-		hashFn:     generateMD5,
+		RWMutex:  sync.RWMutex{},
+		pairsSet: make(map[string]tuple, sizeLimit(options.MaxSize)),
+		hashFn:   hashFn,
 	}
 }
 
@@ -40,19 +70,16 @@ func (c *Cache) Get(key string) ([]byte, error) {
 	c.RLock()
 	defer c.RUnlock()
 
-	keyHashed, err := c.hashFn([]byte(key))
-	if err != nil {
-		return nil, err
-	}
+	keyHashed := c.hashFn([]byte(key))
 
-	pair, exists := c.entries[keyHashed]
+	pair, exists := c.pairsSet[keyHashed]
 
 	if !exists {
 		return nil, ErrNoExistKey
 	}
 
 	if time.Since(pair.createdAt) > pair.ttl && pair.ttl != -1 {
-		delete(c.entries, keyHashed)
+		delete(c.pairsSet, keyHashed)
 		return nil, ErrNoExistKey
 	}
 
@@ -66,7 +93,7 @@ func (c *Cache) Upsert(key string, value []byte, ttl time.Duration) (bool, error
 		return false, ErrEmptyKey
 	}
 
-	errPairs := c.checkPairsSetLimit(&c.entries)
+	errPairs := c.checkPairsSetLimit(&c.pairsSet)
 	if errPairs != nil {
 		return false, errPairs
 	}
@@ -79,14 +106,15 @@ func (c *Cache) Upsert(key string, value []byte, ttl time.Duration) (bool, error
 	c.Lock()
 	defer c.Unlock()
 
-	keyHashed, err := c.hashFn([]byte(key))
-	if err != nil {
-		return false, err
+	keyHashed := c.hashFn([]byte(key))
+
+	if c.pairsSet == nil {
+		c.pairsSet = make(map[string]tuple, getLimitPairsSet())
 	}
 
 	// redis in generic command:  if (ttl == -1)
 	// golang use with functions time.Duration = -1
-	c.entries[keyHashed] = tuple{
+	c.pairsSet[keyHashed] = tuple{
 		ttl:       ttl,
 		createdAt: time.Now(),
 		value:     value,
@@ -103,14 +131,12 @@ func (c *Cache) Delete(key string) (bool, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	keyHashed, err := c.hashFn([]byte(key))
-	if err != nil {
-		return false, err
-	}
-	_, exists := c.entries[keyHashed]
+	keyHashed := c.hashFn([]byte(key))
+
+	_, exists := c.pairsSet[keyHashed]
 
 	if exists {
-		delete(c.entries, keyHashed)
+		delete(c.pairsSet, keyHashed)
 	} else {
 		return false, errors.New("key not found")
 	}
@@ -126,12 +152,9 @@ func (c *Cache) Exists(key string) (bool, error) {
 	c.RLock()
 	defer c.RUnlock()
 
-	keyHashed, err := c.hashFn([]byte(key))
-	if err != nil {
-		return false, err
-	}
+	keyHashed := c.hashFn([]byte(key))
 
-	pair, exists := c.entries[keyHashed]
+	pair, exists := c.pairsSet[keyHashed]
 
 	if !exists {
 		return false, ErrNoExistKey
